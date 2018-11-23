@@ -6,6 +6,7 @@ import os
 import flickrapi
 import xml.etree.ElementTree as ET
 
+import requests
 
 api_key = '78fa534193acf30e53d7c9e95dfdc567'
 api_secret = '34160d71501154cd'
@@ -69,6 +70,14 @@ if setsXML.attrib['stat'] == 'ok':
 			sizesXML = flickr.photos.getSizes(photo_id=photo_id)
 			large_size = sizesXML.find('.//size[@label="Large"]')
 
+			if large_size is None:
+				# then just default to original
+				large_size = sizesXML.find('.//size[@label="Original"]')
+
+			if large_size is None:
+				print("coulnd't find size for photo: {}. skipping...".format(photo_id))
+				continue
+
 			photo_url = large_size.attrib['source']
 
 			photo_name = photo_url.split('/')[-1]
@@ -79,8 +88,28 @@ if setsXML.attrib['stat'] == 'ok':
 			# metadata_file.write(ET.tostring(photo, encoding='utf8', method='xml').decode('utf-8'))
 			# metadata_file.close()
 
+			if os.path.exists(album_folder + '/' + photo_name):
+				# skip, file exists
+				print('skipping {}. file exists'.format(photo_url))
+				continue
+
 			# downloading the file
 			print("downloading {}".format(photo_url))
-			urllib.request.urlretrieve(photo_url, album_folder + '/' + photo_name)
+			retries = 0
+			request = None
+			while request is None or (request.status_code != 200 and retries < 2):
+				try:
+					request = requests.get(photo_url, timeout=10)
+				except Exception:
+					retries += 1
+					print("retrying download")
+
+			if request is None or request.status_code != 200:
+				print("gave up on file: {}".format(photo_url))
+			else:
+				with open(album_folder + '/' + photo_name, 'wb') as file:
+					file.write(request.content)
+
+			# urllib.request.urlretrieve(photo_url, album_folder + '/' + photo_name)
 else:
 	print("Flickr error")
