@@ -1,85 +1,86 @@
-# Python 2.7
-import flickrapi
-from bs4 import BeautifulSoup
-import requests
-import re
-import urllib
-import os
+#!/usr/bin/env python
 
+import urllib.request
+import sys
+import os
+import flickrapi
+import xml.etree.ElementTree as ET
 
 
 api_key = '78fa534193acf30e53d7c9e95dfdc567'
 api_secret = '34160d71501154cd'
+
+nArguments = 3
+usageString = "usage: python flickr_download.py <user_id> <access_type>"
+download_folder = "flickr_downloads"
+
+if len(sys.argv)!= nArguments:
+	print(usageString)
+	sys.exit()
+elif not sys.argv[2] == "private" and not sys.argv[2] == "public":
+	print("Error: access_type should be either public or private")
+	sys.exit()
+else:
+	user_id = sys.argv[1]
+	access_type = sys.argv[2]
+		
 flickr = flickrapi.FlickrAPI(api_key, api_secret)
+if access_type == "private":
+	flickr.authenticate_via_browser(perms='read')	
 
-def main():
-	if not os.path.exists('images'):
-		os.makedirs('images')
-	os.chdir('images')
-	download()
-	print('All set, all pictures were downloaded into a folder called images')
+# getting all the albums of the user
+setsXML = flickr.photosets.getList(user_id=user_id)
 
-def download():
-	choice = (raw_input('Type "tag" or "album" for corresponding choice. \nDo you want to download images by tag or specific album: '))
-	#counter is created in order to label the images when they are downloaded
-	counter = 0
+if setsXML.attrib['stat'] == 'ok':
+	sets = setsXML.findall('.//photoset')
 
-	if(choice == 'album'):
-		albumID = int(raw_input('Enter the ID of the folder you wish to download: '))
-		name = raw_input('Enter the username of the desired users pictures: ')
-		# checking if the folder exists, creating a folder and moving into it
-		if not os.path.exists(name+'/'+albumID):
-			os.makedirs(name+'/'+albumID)
-		os.chdir(name+'/'+albumID)
+	# for each album
+	for set in sets:
 
-		print('Downloading...')
-		# walk_set function loops through the pictures of a specific album
-		for photo in flickr.walk_set(albumID):
-			# beautiful soup opens up the direct link to the picture using authors id(name) and photo id, specifying sizes/k will
-			# result in the highest quality picture available on flickr
-			url = 'https://www.flickr.com/photos/'+ name+ '/' + photo.get('id') + '/sizes/k/'
-			webpage = requests.get(url)
-			soup = BeautifulSoup(webpage.text, 'html.parser')
-			x = soup.findAll('img')
-			# we read the html using soup and look for img, after which we look for src link and extract it
-			for link in soup.find_all('img'):
-				new = (link.get('src'))
-				if(new.count(".jpg")) == 1:
-					#the link is downloaded using URLopener() and saved with 'photo + counter'
-					testfile = urllib.URLopener()
-					testfile.retrieve(new, 'photo' + str(counter) + '.jpg' )
-					counter = counter + 1
+		title = set.find('title').text
+		print("             |")
+		print("Downloading \|/ ")
+		print(title)
+		print("\n")
 
-	elif(choice == 'tag'):
-		tag = raw_input('Enter the tags(in format:tagName1,tagName2,tagName3 and etc): ')
-		# checking if the folder exists, creating a folder and moving into it
-		if not os.path.exists(tag):
-			os.makedirs(tag)
-		os.chdir(tag)
-		# checking the total number of available pictures with the specific tag
-		total = int(flickr.photos.search(tags=tag).find('photos').attrib['total'])			
-		print('There are ' + str(total) + ' pictures found \nDownloading...')
-		# walk_set function loops through the pictures with the tag for more info go to flickrapi python documentation
-		for photo in flickr.walk(tag_mode='all', tags=tag):
-			author =  photo.get('owner') # return the owner of the picture
-			# beautiful soup opens up the direct link to the picture using authors id and photos id, specifying sizes/k will
-			# result in the highest quality picture available on flickr
-			url = 'https://www.flickr.com/photos/'+ author+ '/' + photo.get('id') + '/sizes/k/'
-			webpage = requests.get(url)
-			soup = BeautifulSoup(webpage.text, 'html.parser')
-			x = soup.findAll('img')
-			# we read the html using soup and look for img, after which we look for src link and extract it
-			for link in soup.find_all('img'):
-				new = (link.get('src'))
-				if(new.count(".jpg")) == 1:
-					#the link is downloaded using URLopener() and saved with 'photo + counter'
-					testfile = urllib.URLopener()
-					testfile.retrieve(new, 'photo' + str(counter) + '.jpg' )
-					counter = counter + 1
-	else:
-		print('An Error appeared in your input. ')
-		download()
+		# get the title of the album
+		album_folder = download_folder + "/" + title
+		if os.path.exists(album_folder):
+			continue
 
+		print("creating directory for album: {}".format(title))
+		os.makedirs(album_folder)
 
-if __name__ == '__main__':
-    main()
+		id = set.attrib['id']
+
+		# store the metadata of the album in a file
+		# metadata_file = open(download_folder + "/" + id + "/" + id + '.xml','w')
+		# md_str = ET.tostring(set, encoding='utf8', method='xml').decode('utf-8')
+		# title_tag = next(set.iter(tag='title'))
+
+		# getting the files in the album
+		photosXML = flickr.photosets.getPhotos(photoset_id=id)
+		photos = photosXML.findall('.//photo')
+
+		# for each file in the album
+		for photo in photos:
+			photo_id = photo.attrib['id']
+			
+			sizesXML = flickr.photos.getSizes(photo_id=photo_id)
+			large_size = sizesXML.find('.//size[@label="Large"]')
+
+			photo_url = large_size.attrib['source']
+
+			photo_name = photo_url.split('/')[-1]
+			# print("		" + photo_name)
+			
+			# store the metadata of the file
+			# metadata_file = open(download_folder + "/" + id + "/" + photo_name.split('.')[-2] + '.xml','w')
+			# metadata_file.write(ET.tostring(photo, encoding='utf8', method='xml').decode('utf-8'))
+			# metadata_file.close()
+
+			# downloading the file
+			print("downloading {}".format(photo_url))
+			urllib.request.urlretrieve(photo_url, album_folder + '/' + photo_name)
+else:
+	print("Flickr error")

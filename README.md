@@ -1,4 +1,13 @@
 # flickr Downloader for albums and tags
+## Why the Fork
+Flickr is going to start charging for storage in 2019, so I wanted to download all my shit so I can upload it all to one of my cloud drives. This script preserves albums and stores everything from albums in subdirectories so it was exactly what I was looking for.
+</br>
+Updates to the fork:</br>
+- updated to work with python 3 (i'm using 3.7)
+- changed the album directory names to use the album title instead of the id
+- download a large version of the photo instead of the original size (i'd rather save space and my photos aren't with a crazy camera, but if you want to download the original change the "@label="Large" back to "@label="Original"
+- don't bother saving the metadata files
+
 ## Why:
 well, I was looking for a nice wallpapers and found these amazing photos by Masashi Wakui on flickr. </br>
 tried downloading, but apparently flickr was not allowing any downloads.</br>
